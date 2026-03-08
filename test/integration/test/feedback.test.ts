@@ -360,6 +360,57 @@ describe('Client Experience Feedback', () => {
         await server.close();
     });
 
+    test('on-demand feedback bypasses cadence and is flagged correctly', async () => {
+        const feedbackHandler = vi.fn();
+
+        const server = new Server(
+            { name: 'TestServer', version: '1.0.0' },
+            {
+                capabilities: {
+                    feedback: {
+                        enabled: true,
+                        cadence: 'monthly',
+                        categories: ['usability', 'reliability']
+                    }
+                }
+            }
+        );
+        server.onfeedback = feedbackHandler;
+
+        const client = new Client(
+            { name: 'TestClient', version: '1.0.0' },
+            { capabilities: { feedback: { enabled: true } } }
+        );
+
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+        // User-initiated on-demand feedback during active session
+        const result = await client.submitFeedback({
+            feedbackVersion: '2026-03-08',
+            generatedAt: new Date().toISOString(),
+            cadence: 'session',
+            onDemand: true,
+            items: [
+                {
+                    category: 'reliability',
+                    toolName: 'deploy_service',
+                    severity: 5,
+                    subcategory: 'intermittent_failure',
+                    observation: 'Tool fails silently without returning an error status.'
+                }
+            ]
+        });
+
+        expect(result.accepted).toBe(true);
+        expect(feedbackHandler).toHaveBeenCalledOnce();
+        expect(feedbackHandler.mock.calls[0][0].onDemand).toBe(true);
+        expect(feedbackHandler.mock.calls[0][0].items[0].severity).toBe(5);
+
+        await client.close();
+        await server.close();
+    });
+
     test('feedback budget is communicated in client capabilities', async () => {
         const server = new Server(
             { name: 'TestServer', version: '1.0.0' },

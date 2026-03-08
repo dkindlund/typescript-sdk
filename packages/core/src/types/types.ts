@@ -1877,7 +1877,12 @@ export const FeedbackSubmitRequestParamsSchema = BaseRequestParamsSchema.extend(
     /**
      * Session-level rollup metrics.
      */
-    rollupMetrics: FeedbackRollupMetricsSchema.optional()
+    rollupMetrics: FeedbackRollupMetricsSchema.optional(),
+    /**
+     * Whether this feedback was explicitly requested by the user during an
+     * active session. When true, cadence controls are bypassed. Default: false.
+     */
+    onDemand: z.boolean().optional()
 });
 
 /**
