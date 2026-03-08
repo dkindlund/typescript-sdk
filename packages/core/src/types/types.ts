@@ -1828,6 +1828,12 @@ export const FeedbackItemSchema = z.object({
      */
     confusedWith: z.string().optional(),
     /**
+     * Whether the confusion was with a tool from a different MCP server (true)
+     * or the same server (false/omitted). When true, the other server's identity
+     * MUST NOT be disclosed in the feedback.
+     */
+    confusedWithExternal: z.boolean().optional(),
+    /**
      * Constrained free-text observation about tool design (MUST NOT contain
      * parameter values, resource content, user input, PII, or identifying information).
      */

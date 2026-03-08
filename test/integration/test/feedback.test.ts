@@ -309,6 +309,57 @@ describe('Client Experience Feedback', () => {
         await server.close();
     });
 
+    test('feedback supports cross-server tool confusion signaling', async () => {
+        const feedbackHandler = vi.fn();
+
+        const server = new Server(
+            { name: 'TestServer', version: '1.0.0' },
+            {
+                capabilities: {
+                    feedback: {
+                        enabled: true,
+                        cadence: 'session',
+                        categories: ['usability']
+                    }
+                }
+            }
+        );
+        server.onfeedback = feedbackHandler;
+
+        const client = new Client(
+            { name: 'TestClient', version: '1.0.0' },
+            { capabilities: { feedback: { enabled: true } } }
+        );
+
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+        const result = await client.submitFeedback({
+            feedbackVersion: '2026-03-08',
+            generatedAt: new Date().toISOString(),
+            cadence: 'session',
+            items: [
+                {
+                    category: 'usability',
+                    toolName: 'search',
+                    severity: 4,
+                    subcategory: 'naming',
+                    confusedWith: 'search',
+                    confusedWithExternal: true,
+                    observation: 'Tool has the same name as a tool from a different server, causing confusion.'
+                }
+            ]
+        });
+
+        expect(result.accepted).toBe(true);
+        const receivedItem = feedbackHandler.mock.calls[0][0].items[0];
+        expect(receivedItem.confusedWithExternal).toBe(true);
+        expect(receivedItem.confusedWith).toBe('search');
+
+        await client.close();
+        await server.close();
+    });
+
     test('feedback budget is communicated in client capabilities', async () => {
         const server = new Server(
             { name: 'TestServer', version: '1.0.0' },
