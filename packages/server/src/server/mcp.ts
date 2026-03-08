@@ -8,6 +8,7 @@ import type {
     CompleteResult,
     CreateTaskResult,
     CreateTaskServerContext,
+    FeedbackSubmitRequest,
     GetPromptResult,
     Implementation,
     ListPromptsResult,
@@ -1003,6 +1004,15 @@ export class McpServer {
         if (this.isConnected()) {
             this.server.sendPromptListChanged();
         }
+    }
+
+    /**
+     * Registers a callback for when the client submits experience feedback.
+     *
+     * The server must declare the `feedback` capability for this to be called.
+     */
+    onFeedback(handler: (params: FeedbackSubmitRequest['params']) => void | Promise<void>): void {
+        this.server.onfeedback = handler;
     }
 }
 

@@ -8,6 +8,7 @@ import type {
     ClientRequest,
     ClientResult,
     CompleteRequest,
+    FeedbackSubmitRequest,
     GetPromptRequest,
     Implementation,
     JsonSchemaType,
@@ -46,6 +47,7 @@ import {
     ElicitRequestSchema,
     ElicitResultSchema,
     EmptyResultSchema,
+    FeedbackSubmitResultSchema,
     GetPromptResultSchema,
     InitializeResultSchema,
     LATEST_PROTOCOL_VERSION,
@@ -719,6 +721,14 @@ export class Client extends Protocol<ClientContext> {
     /** Sets the minimum severity level for log messages sent by the server. */
     async setLoggingLevel(level: LoggingLevel, options?: RequestOptions) {
         return this._requestWithSchema({ method: 'logging/setLevel', params: { level } }, EmptyResultSchema, options);
+    }
+
+    /**
+     * Submits client experience feedback to the server.
+     * The server must declare the `feedback` capability for this to succeed.
+     */
+    async submitFeedback(params: FeedbackSubmitRequest['params'], options?: RequestOptions) {
+        return this._requestWithSchema({ method: 'feedback/submit', params }, FeedbackSubmitResultSchema, options);
     }
 
     /** Retrieves a prompt by name from the server, passing the given arguments for template substitution. */

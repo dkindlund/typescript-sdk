@@ -514,6 +514,104 @@ export const ServerTasksCapabilitySchema = z.looseObject({
         .optional()
 });
 
+/* Client Experience Feedback — Capability Schemas */
+
+/**
+ * How often the server requests feedback from clients.
+ */
+export const FeedbackCadenceSchema = z.enum(['session', 'daily', 'weekly', 'monthly']);
+
+/**
+ * Categories of feedback that clients can provide.
+ */
+export const FeedbackCategorySchema = z.enum(['usability', 'reliability', 'documentation', 'efficiency', 'interoperability']);
+
+/**
+ * Subcategories providing finer-grained classification of feedback.
+ */
+export const FeedbackSubcategorySchema = z.enum([
+    // usability
+    'naming',
+    'parameters',
+    'behavior',
+    'discoverability',
+    // reliability
+    'intermittent_failure',
+    'incorrect_result',
+    'timeout',
+    'unexpected_error',
+    // documentation
+    'missing',
+    'outdated',
+    'ambiguous',
+    'incorrect',
+    // efficiency
+    'needs_batch_mode',
+    'excessive_calls',
+    'redundant_with',
+    'slow_response',
+    // interoperability
+    'implicit_dependency',
+    'conflicting_behavior',
+    'missing_integration',
+    'ordering_sensitive'
+]);
+
+/**
+ * Server-side feedback capability declaration.
+ */
+export const ServerFeedbackCapabilitySchema = z.object({
+    /**
+     * Whether the server accepts feedback.
+     */
+    enabled: z.boolean(),
+    /**
+     * How often the server requests feedback.
+     */
+    cadence: FeedbackCadenceSchema,
+    /**
+     * Which feedback categories the server is interested in.
+     */
+    categories: z.array(FeedbackCategorySchema),
+    /**
+     * Optional external webhook URL for out-of-band feedback delivery.
+     * If null/undefined, feedback is sent via the MCP connection using feedback/submit.
+     */
+    endpoint: z.string().url().nullable().optional(),
+    /**
+     * Maximum size of a single feedback payload in bytes. Default: 4096.
+     */
+    maxFeedbackSize: z.number().int().positive().optional()
+});
+
+/**
+ * Client-side budget controls for feedback generation cost.
+ */
+export const FeedbackBudgetSchema = z.object({
+    /**
+     * Maximum tokens the client will spend generating feedback per month.
+     */
+    maxTokensPerMonth: z.number().int().positive().optional(),
+    /**
+     * Maximum number of feedback submissions per month.
+     */
+    maxSubmissionsPerMonth: z.number().int().positive().optional()
+});
+
+/**
+ * Client-side feedback capability declaration.
+ */
+export const ClientFeedbackCapabilitySchema = z.object({
+    /**
+     * Whether the client has opted in to providing feedback.
+     */
+    enabled: z.boolean(),
+    /**
+     * Optional cost controls for feedback generation.
+     */
+    budget: FeedbackBudgetSchema.optional()
+});
+
 /**
  * Capabilities a client may support. Known capabilities are defined here, in this schema, but this is not a closed set: any client can define its own, additional capabilities.
  */
@@ -556,7 +654,11 @@ export const ClientCapabilitiesSchema = z.object({
     /**
      * Present if the client supports task creation.
      */
-    tasks: ClientTasksCapabilitySchema.optional()
+    tasks: ClientTasksCapabilitySchema.optional(),
+    /**
+     * Present if the client supports providing experience feedback to servers.
+     */
+    feedback: ClientFeedbackCapabilitySchema.optional()
 });
 
 export const InitializeRequestParamsSchema = BaseRequestParamsSchema.extend({
@@ -634,7 +736,11 @@ export const ServerCapabilitiesSchema = z.object({
     /**
      * Present if the server supports task creation.
      */
-    tasks: ServerTasksCapabilitySchema.optional()
+    tasks: ServerTasksCapabilitySchema.optional(),
+    /**
+     * Present if the server accepts client experience feedback.
+     */
+    feedback: ServerFeedbackCapabilitySchema.optional()
 });
 
 /**
@@ -1671,6 +1777,121 @@ export const LoggingMessageNotificationSchema = NotificationSchema.extend({
     params: LoggingMessageNotificationParamsSchema
 });
 
+/* Client Experience Feedback — Request/Response Schemas */
+
+/**
+ * Quantitative metrics for a single tool within a session.
+ */
+export const FeedbackToolMetricsSchema = z.object({
+    calls: z.number().int().nonnegative(),
+    successRate: z.number().min(0).max(1),
+    avgRetries: z.number().nonnegative()
+});
+
+/**
+ * Quantitative metrics for an individual feedback item.
+ */
+export const FeedbackSessionMetricsSchema = z.object({
+    totalCalls: z.number().int().nonnegative().optional(),
+    successfulCalls: z.number().int().nonnegative().optional(),
+    failedCalls: z.number().int().nonnegative().optional(),
+    retriedCalls: z.number().int().nonnegative().optional(),
+    averageLatencyMs: z.number().nonnegative().optional()
+});
+
+/**
+ * A single feedback item reporting on a tool or tool interaction.
+ */
+export const FeedbackItemSchema = z.object({
+    /**
+     * The feedback category.
+     */
+    category: FeedbackCategorySchema,
+    /**
+     * The tool being reported on (for single-tool feedback).
+     */
+    toolName: z.string().optional(),
+    /**
+     * The tools being reported on (for interoperability feedback).
+     */
+    toolNames: z.array(z.string()).optional(),
+    /**
+     * Severity from 1 (minor) to 5 (critical).
+     */
+    severity: z.number().int().min(1).max(5),
+    /**
+     * Category-specific subcategory.
+     */
+    subcategory: FeedbackSubcategorySchema,
+    /**
+     * Tool name that this tool was confused with (for usability/naming feedback).
+     */
+    confusedWith: z.string().optional(),
+    /**
+     * Constrained free-text observation about tool design (MUST NOT contain
+     * parameter values, resource content, user input, PII, or identifying information).
+     */
+    observation: z.string().max(500).optional(),
+    /**
+     * Quantitative metrics from the session for this tool.
+     */
+    sessionMetrics: FeedbackSessionMetricsSchema.optional()
+});
+
+/**
+ * Session-level rollup metrics across all tools.
+ */
+export const FeedbackRollupMetricsSchema = z.object({
+    totalToolCalls: z.number().int().nonnegative(),
+    uniqueToolsUsed: z.number().int().nonnegative(),
+    overallSuccessRate: z.number().min(0).max(1),
+    toolMetrics: z.record(z.string(), FeedbackToolMetricsSchema).optional()
+});
+
+/**
+ * Parameters for a feedback/submit request.
+ */
+export const FeedbackSubmitRequestParamsSchema = BaseRequestParamsSchema.extend({
+    /**
+     * Version of the feedback schema.
+     */
+    feedbackVersion: z.string(),
+    /**
+     * When the feedback was generated (ISO 8601).
+     */
+    generatedAt: z.string(),
+    /**
+     * The cadence this feedback covers.
+     */
+    cadence: FeedbackCadenceSchema,
+    /**
+     * Individual feedback items.
+     */
+    items: z.array(FeedbackItemSchema).min(1),
+    /**
+     * Session-level rollup metrics.
+     */
+    rollupMetrics: FeedbackRollupMetricsSchema.optional()
+});
+
+/**
+ * Request from client to server to submit experience feedback.
+ */
+export const FeedbackSubmitRequestSchema = RequestSchema.extend({
+    method: z.literal('feedback/submit'),
+    params: FeedbackSubmitRequestParamsSchema
+});
+
+/**
+ * Result of a feedback/submit request.
+ */
+export const FeedbackSubmitResultSchema = ResultSchema.extend({
+    /**
+     * Whether the feedback was accepted by the server.
+     */
+    accepted: z.boolean()
+});
+
 /* Sampling */
 /**
  * Hints to use for model selection.
@@ -2267,7 +2488,8 @@ export const ClientRequestSchema = z.union([
     GetTaskRequestSchema,
     GetTaskPayloadRequestSchema,
     ListTasksRequestSchema,
-    CancelTaskRequestSchema
+    CancelTaskRequestSchema,
+    FeedbackSubmitRequestSchema
 ]);
 
 export const ClientNotificationSchema = z.union([
@@ -2326,7 +2548,8 @@ export const ServerResultSchema = z.union([
     ListToolsResultSchema,
     GetTaskResultSchema,
     ListTasksResultSchema,
-    CreateTaskResultSchema
+    CreateTaskResultSchema,
+    FeedbackSubmitResultSchema
 ]);
 
 /**
@@ -2564,6 +2787,21 @@ export type SetLevelRequest = Infer<typeof SetLevelRequestSchema>;
 export type LoggingMessageNotificationParams = Infer<typeof LoggingMessageNotificationParamsSchema>;
 export type LoggingMessageNotification = Infer<typeof LoggingMessageNotificationSchema>;
 
+/* Client Experience Feedback */
+export type FeedbackCadence = Infer<typeof FeedbackCadenceSchema>;
+export type FeedbackCategory = Infer<typeof FeedbackCategorySchema>;
+export type FeedbackSubcategory = Infer<typeof FeedbackSubcategorySchema>;
+export type FeedbackBudget = Infer<typeof FeedbackBudgetSchema>;
+export type ServerFeedbackCapability = Infer<typeof ServerFeedbackCapabilitySchema>;
+export type ClientFeedbackCapability = Infer<typeof ClientFeedbackCapabilitySchema>;
+export type FeedbackToolMetrics = Infer<typeof FeedbackToolMetricsSchema>;
+export type FeedbackSessionMetrics = Infer<typeof FeedbackSessionMetricsSchema>;
+export type FeedbackItem = Infer<typeof FeedbackItemSchema>;
+export type FeedbackRollupMetrics = Infer<typeof FeedbackRollupMetricsSchema>;
+export type FeedbackSubmitRequestParams = Infer<typeof FeedbackSubmitRequestParamsSchema>;
+export type FeedbackSubmitRequest = Infer<typeof FeedbackSubmitRequestSchema>;
+export type FeedbackSubmitResult = Infer<typeof FeedbackSubmitResultSchema>;
+
 /* Sampling */
 export type ToolChoice = Infer<typeof ToolChoiceSchema>;
 export type ModelHint = Infer<typeof ModelHintSchema>;
@@ -2668,6 +2906,7 @@ export type ResultTypeMap = {
     'tasks/result': Result;
     'tasks/list': ListTasksResult;
     'tasks/cancel': CancelTaskResult;
+    'feedback/submit': FeedbackSubmitResult;
 };
 
 /* Runtime schema lookup — result schemas by method */
@@ -2691,7 +2930,8 @@ const resultSchemas: Record<string, z.core.$ZodType> = {
     'tasks/get': GetTaskResultSchema,
     'tasks/result': ResultSchema,
     'tasks/list': ListTasksResultSchema,
-    'tasks/cancel': CancelTaskResultSchema
+    'tasks/cancel': CancelTaskResultSchema,
+    'feedback/submit': FeedbackSubmitResultSchema
 };
 
 /**

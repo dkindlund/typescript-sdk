@@ -9,6 +9,8 @@ import type {
     ElicitRequestFormParams,
     ElicitRequestURLParams,
     ElicitResult,
+    FeedbackSubmitRequest,
+    FeedbackSubmitResult,
     Implementation,
     InitializeRequest,
     InitializeResult,
@@ -100,6 +102,11 @@ export class Server extends Protocol<ServerContext> {
     oninitialized?: () => void;
 
     /**
+     * Callback for when the client submits experience feedback.
+     */
+    onfeedback?: (params: FeedbackSubmitRequest['params']) => void | Promise<void>;
+
+    /**
      * Initializes this server with the given name and version information.
      */
     constructor(
@@ -117,6 +124,10 @@ export class Server extends Protocol<ServerContext> {
         if (this._capabilities.logging) {
             this._registerLoggingHandler();
         }
+
+        if (this._capabilities.feedback) {
+            this._registerFeedbackHandler();
+        }
     }
 
     private _registerLoggingHandler(): void {
@@ -129,6 +140,15 @@ export class Server extends Protocol<ServerContext> {
                 this._loggingLevels.set(transportSessionId, parseResult.data);
             }
             return {};
+        });
+    }
+
+    private _registerFeedbackHandler(): void {
+        this.setRequestHandler('feedback/submit', async (request) => {
+            if (this.onfeedback) {
+                await this.onfeedback(request.params);
+            }
+            return { accepted: true } satisfies FeedbackSubmitResult;
         });
     }
 
@@ -193,9 +213,13 @@ export class Server extends Protocol<ServerContext> {
             throw new SdkError(SdkErrorCode.AlreadyConnected, 'Cannot register capabilities after connecting to transport');
         }
         const hadLogging = !!this._capabilities.logging;
+        const hadFeedback = !!this._capabilities.feedback;
         this._capabilities = mergeCapabilities(this._capabilities, capabilities);
         if (!hadLogging && this._capabilities.logging) {
             this._registerLoggingHandler();
+        }
+        if (!hadFeedback && this._capabilities.feedback) {
+            this._registerFeedbackHandler();
         }
     }
 
