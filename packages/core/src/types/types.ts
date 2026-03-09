@@ -614,7 +614,19 @@ export const ClientFeedbackCapabilitySchema = z.object({
     /**
      * Optional cost controls for feedback generation.
      */
-    budget: FeedbackBudgetSchema.optional()
+    budget: FeedbackBudgetSchema.optional(),
+    /**
+     * Privacy-tiered participation level from 1 (least invasive) to 5 (most invasive).
+     * Controls which feedback categories are shared:
+     * 1=reliability, 2=+efficiency, 3=+usability+documentation,
+     * 4=+interoperability, 5=+capability_gap.
+     * Defaults to 3 if neither level nor categories is specified.
+     */
+    level: z.number().int().min(1).max(5).optional(),
+    /**
+     * Explicit list of allowed feedback categories. Overrides level if both are provided.
+     */
+    categories: z.array(FeedbackCategorySchema).optional()
 });
 
 /**

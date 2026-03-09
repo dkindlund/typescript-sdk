@@ -471,6 +471,90 @@ describe('Client Experience Feedback', () => {
         await server.close();
     });
 
+    test('client privacy level is communicated in capabilities', async () => {
+        const server = new Server(
+            { name: 'TestServer', version: '1.0.0' },
+            {
+                capabilities: {
+                    feedback: {
+                        enabled: true,
+                        cadence: 'session',
+                        categories: ['usability', 'reliability', 'documentation', 'efficiency', 'interoperability', 'capability_gap']
+                    }
+                }
+            }
+        );
+
+        let receivedClientCaps: unknown;
+        server.oninitialized = () => {
+            receivedClientCaps = server.getClientCapabilities();
+        };
+
+        const client = new Client(
+            { name: 'TestClient', version: '1.0.0' },
+            {
+                capabilities: {
+                    feedback: {
+                        enabled: true,
+                        level: 2
+                    }
+                }
+            }
+        );
+
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+        expect(receivedClientCaps).toBeDefined();
+        const feedbackCaps = (receivedClientCaps as { feedback: { level: number } }).feedback;
+        expect(feedbackCaps.level).toBe(2);
+
+        await client.close();
+        await server.close();
+    });
+
+    test('client explicit categories override is communicated in capabilities', async () => {
+        const server = new Server(
+            { name: 'TestServer', version: '1.0.0' },
+            {
+                capabilities: {
+                    feedback: {
+                        enabled: true,
+                        cadence: 'session',
+                        categories: ['usability', 'reliability', 'documentation', 'efficiency', 'interoperability', 'capability_gap']
+                    }
+                }
+            }
+        );
+
+        let receivedClientCaps: unknown;
+        server.oninitialized = () => {
+            receivedClientCaps = server.getClientCapabilities();
+        };
+
+        const client = new Client(
+            { name: 'TestClient', version: '1.0.0' },
+            {
+                capabilities: {
+                    feedback: {
+                        enabled: true,
+                        categories: ['reliability', 'efficiency']
+                    }
+                }
+            }
+        );
+
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+        expect(receivedClientCaps).toBeDefined();
+        const feedbackCaps = (receivedClientCaps as { feedback: { categories: string[] } }).feedback;
+        expect(feedbackCaps.categories).toEqual(['reliability', 'efficiency']);
+
+        await client.close();
+        await server.close();
+    });
+
     test('feedback budget is communicated in client capabilities', async () => {
         const server = new Server(
             { name: 'TestServer', version: '1.0.0' },
