@@ -524,7 +524,7 @@ export const FeedbackCadenceSchema = z.enum(['session', 'daily', 'weekly', 'mont
 /**
  * Categories of feedback that clients can provide.
  */
-export const FeedbackCategorySchema = z.enum(['usability', 'reliability', 'documentation', 'efficiency', 'interoperability']);
+export const FeedbackCategorySchema = z.enum(['usability', 'reliability', 'documentation', 'efficiency', 'interoperability', 'capability_gap']);
 
 /**
  * Subcategories providing finer-grained classification of feedback.
@@ -554,7 +554,12 @@ export const FeedbackSubcategorySchema = z.enum([
     'implicit_dependency',
     'conflicting_behavior',
     'missing_integration',
-    'ordering_sensitive'
+    'ordering_sensitive',
+    // capability_gap
+    'missing_tool',
+    'missing_parameter',
+    'missing_integration',
+    'scope_limitation'
 ]);
 
 /**

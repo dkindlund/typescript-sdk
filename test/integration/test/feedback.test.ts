@@ -411,6 +411,66 @@ describe('Client Experience Feedback', () => {
         await server.close();
     });
 
+    test('feedback supports capability_gap category for new use case discovery', async () => {
+        const feedbackHandler = vi.fn();
+
+        const server = new Server(
+            { name: 'TestServer', version: '1.0.0' },
+            {
+                capabilities: {
+                    feedback: {
+                        enabled: true,
+                        cadence: 'session',
+                        categories: ['capability_gap']
+                    }
+                }
+            }
+        );
+        server.onfeedback = feedbackHandler;
+
+        const client = new Client(
+            { name: 'TestClient', version: '1.0.0' },
+            { capabilities: { feedback: { enabled: true } } }
+        );
+
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+        const result = await client.submitFeedback({
+            feedbackVersion: '2026-03-08',
+            generatedAt: new Date().toISOString(),
+            cadence: 'session',
+            items: [
+                {
+                    category: 'capability_gap',
+                    toolName: 'get_record',
+                    severity: 3,
+                    subcategory: 'missing_parameter',
+                    observation: 'Tool lacks a filter parameter for querying by date range.'
+                },
+                {
+                    category: 'capability_gap',
+                    severity: 4,
+                    subcategory: 'missing_tool',
+                    observation: 'No tool available for bulk export of records.'
+                }
+            ]
+        });
+
+        expect(result.accepted).toBe(true);
+        expect(feedbackHandler).toHaveBeenCalledOnce();
+        const items = feedbackHandler.mock.calls[0][0].items;
+        expect(items[0].category).toBe('capability_gap');
+        expect(items[0].subcategory).toBe('missing_parameter');
+        expect(items[0].toolName).toBe('get_record');
+        expect(items[1].category).toBe('capability_gap');
+        expect(items[1].subcategory).toBe('missing_tool');
+        expect(items[1].toolName).toBeUndefined();
+
+        await client.close();
+        await server.close();
+    });
+
     test('feedback budget is communicated in client capabilities', async () => {
         const server = new Server(
             { name: 'TestServer', version: '1.0.0' },
